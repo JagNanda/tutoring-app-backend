@@ -30,6 +30,9 @@ const tutoringSessionRequestSchema = new mongoose.Schema({
     duration: {
         type: Number
     },
+    cost: {
+        type: Number
+    },
     date: {
         type: Date
     }

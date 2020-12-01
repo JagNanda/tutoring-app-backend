@@ -396,13 +396,12 @@ router.put('/reviews/:user_id/:tutor_user_id/:review_id', [[
 router.post('/request/:tutee_id/:tutor_id', [[
     check('subject', 'Please include a subject!').not().isEmpty(),
     check('details', 'Please include details!').not().isEmpty(),
-    check('levelOfEducation', 'Please include level of education!').not().isEmpty(),
-    check('courseName', 'Please include courseName!').not().isEmpty(),
     check('date', 'Please include a date!').not().isEmpty()
 ], auth], async (req, res) => {
     const errors = validationResult(req)
 
     if(!errors.isEmpty()) {
+        console.log(errors)
         return res.status(400).json({ errors: errors.array() })
     }
 
@@ -433,6 +432,7 @@ router.post('/request/:tutee_id/:tutor_id', [[
             levelOfEducation,
             courseName,
             date,
+            cost,
             duration,
             accepted
         } = req.body;
@@ -440,14 +440,14 @@ router.post('/request/:tutee_id/:tutor_id', [[
         const requestFields = {}
         requestFields.tuteeId = req.params.tutee_id
         requestFields.tutorId = req.params.tutor_id
+        requestFields.accepted = false
         if(subject) requestFields.subject = subject
         if(details) requestFields.details = details
+        if(cost) requestFields.cost = cost
         if(levelOfEducation) requestFields.levelOfEducation = levelOfEducation
         if(courseName) requestFields.courseName = courseName
         if(date) requestFields.date = date
         if(duration) requestFields.duration = duration
-        if(accepted) requestFields.isAvailable = accepted
-        if(!accepted) requestFields.accepted = accepted
 
         let request = new TutoringSessionRequest(requestFields)
 
@@ -599,7 +599,7 @@ router.get('/sessions/requests/:tutor_id', auth, async (req, res) => {
     }
 })
 
-// @route GET /api/tutees/sessions/current/tutor_id
+// @route GET /api/tut/sessions/current/tutor_id
 // @desc Get all current sessions for tutor
 // @access Private
 router.get('/sessions/current/:tutor_id', auth, async (req, res) => {
@@ -684,10 +684,10 @@ router.delete('/post/:post_id/:tutor_id', auth, async (req, res) =>{
     }
 })
 
-// @route GET /api/tutors/session/all/:tutor_id
+// @route POST /api/tutors/request/accept/:request_id/:tutor_id/:tutee_id
 // @desc Update request to accept outgoing request to tutee and incoming request to tutor
 // @access Private
-router.get('/request/accept/:request_id/:tutor_id/:tutee_id', auth, async (req, res) => {
+router.post('/request/accept/:request_id/:tutor_id/:tutee_id', auth, async (req, res) => {
     try {
         let studentUser = await User.find({tuteeId: req.params.tutee_id})
         if (!studentUser) {
@@ -714,30 +714,29 @@ router.get('/request/accept/:request_id/:tutor_id/:tutee_id', auth, async (req, 
             return res.status(404).json({ errors: [{ msg: 'Could not find session request!'}]})
         }
 
-        const { 
-            accepted
-        } = req.body;
+      
+        if(request.accepted == false){
+            const requestFields = {}
+            requestFields.accepted = true;
 
-        const requestFields = {}
-        if(accepted) requestFields.accepted = accepted
-        if(!accepted) requestFields.accepted = accepted
+            request = await TutoringSessionRequest.findByIdAndUpdate(req.params.request_id, requestFields)
+            
+            const sessionFields = {}
+            sessionFields.tuteeId = request.tutee_id
+            sessionFields.tutorId = request.tutor_id
+            sessionFields.hourlyRate = tutor.hourlyRate
+            sessionFields.sessionDuration = request.duration
+            sessionFields.date = request.date
+            sessionFields.request = request._id
+            sessionFields.completed = false
 
-        request = await TutoringSessionRequest.findByIdAndUpdate(req.params.request_id, requestFields)
-        
-        const sessionFields = {}
-        sessionFields.tutee_id = request.tutee_id
-        sessionFields.tutor_id = request.tutor_id
-        sessionFields.hourlyRate = tutor.hourlyRate
-        sessionFields.sessionDuration = 
-        sessionFields.date = request.date
-        sessionFields.request = request._id
-        sessionFields.completed = false
+            let session = new TutoringSession(sessionFields)
 
-        let session = new TutoringSession(sessionFields)
+            await session.save()
+            res.json({session: session, tutorUser: tutorUser, tutee: tutee, studentUser: studentUser, tutor: tutor})
+        }
 
-        await session.save()
-
-        res.json({session: session, tutorUser: tutorUser, tutee: tutee, studentUser: studentUser, tutor: tutor})
+        res.json({message: "This session was already accepted"})
 
     } catch (error) {
         console.error(error)
